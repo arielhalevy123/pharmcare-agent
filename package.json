@@ -1,0 +1,31 @@
+{
+  "name": "pharmacare-agent",
+  "version": "1.0.0",
+  "description": "Stateless real-time conversational AI pharmacy assistant",
+  "main": "dist/backend/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/backend/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only backend/index.ts",
+    "docker:build": "docker build -t safemeds-ai .",
+    "docker:run": "docker run -p 8000:8000 safemeds-ai"
+  },
+  "keywords": ["pharmacy", "ai", "assistant", "openai"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "openai": "^4.20.0",
+    "sqlite3": "^5.1.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@types/cors": "^2.8.17",
+    "typescript": "^5.3.3",
+    "ts-node-dev": "^2.0.0"
+  }
+}
+
