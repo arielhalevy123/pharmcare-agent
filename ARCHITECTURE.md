@@ -66,10 +66,11 @@ Stores medication information with bilingual support (English & Hebrew).
 | `nameHebrew` | TEXT NOT NULL | Medication name in Hebrew |
 | `activeIngredient` | TEXT NOT NULL | Active ingredient in English |
 | `activeIngredientHebrew` | TEXT NOT NULL | Active ingredient in Hebrew |
-| `stock` | INTEGER NOT NULL | Current stock quantity |
 | `requiresPrescription` | INTEGER (0/1) | Whether prescription is required |
 | `usageInstructions` | TEXT NOT NULL | Usage instructions in English |
 | `usageInstructionsHebrew` | TEXT NOT NULL | Usage instructions in Hebrew |
+| `purpose` | TEXT NOT NULL | Medication purpose in English |
+| `purposeHebrew` | TEXT NOT NULL | Medication purpose in Hebrew |
 
 **SQL Schema:**
 ```sql
@@ -79,14 +80,35 @@ CREATE TABLE medications (
   nameHebrew TEXT NOT NULL,
   activeIngredient TEXT NOT NULL,
   activeIngredientHebrew TEXT NOT NULL,
-  stock INTEGER NOT NULL,
   requiresPrescription INTEGER NOT NULL DEFAULT 0,
   usageInstructions TEXT NOT NULL,
-  usageInstructionsHebrew TEXT NOT NULL
+  usageInstructionsHebrew TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  purposeHebrew TEXT NOT NULL
 )
 ```
 
-#### 3. **prescriptions** Table
+**Note**: Stock information is stored separately in the `stock` table (see below).
+
+#### 3. **stock** Table
+Stores current stock quantities for each medication separately from medication information.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `name` | TEXT PRIMARY KEY | Medication name in English (matches medications.name) |
+| `quantity` | INTEGER NOT NULL | Current stock quantity |
+
+**SQL Schema:**
+```sql
+CREATE TABLE stock (
+  name TEXT PRIMARY KEY,
+  quantity INTEGER NOT NULL
+)
+```
+
+**Note**: Stock is stored separately to allow independent management of inventory levels without modifying medication information.
+
+#### 4. **prescriptions** Table
 Links users to medications they have valid prescriptions for.
 
 | Column | Type | Description |
@@ -131,37 +153,51 @@ CREATE TABLE prescriptions (
 
 ### Medications (5 total)
 
+**Note**: Stock quantities are stored separately in the `stock` table (see Stock section below).
+
 #### 1. **Paracetamol** (פאראצטמול)
 - **Active Ingredient**: Acetaminophen (אצטאמינופן)
-- **Stock**: 150 units
+- **Purpose**: Pain relief and fever reduction (הקלה על כאבים והורדת חום)
 - **Requires Prescription**: No (Over-the-counter)
 - **Usage**: Take 500-1000mg every 4-6 hours as needed. Do not exceed 4g per day.
 
 #### 2. **Ibuprofen** (איבופרופן)
 - **Active Ingredient**: Ibuprofen (איבופרופן)
-- **Stock**: 80 units
+- **Purpose**: Pain relief, inflammation reduction, fever reduction (הקלה על כאבים, הפחתת דלקות, הורדת חום)
 - **Requires Prescription**: No (Over-the-counter)
 - **Usage**: Take 200-400mg every 4-6 hours with food. Maximum 1200mg per day.
 
 #### 3. **Amoxicillin** (אמוקסיצילין)
 - **Active Ingredient**: Amoxicillin (אמוקסיצילין)
-- **Stock**: 45 units
+- **Purpose**: Bacterial infections treatment (טיפול בזיהומים חיידקיים)
 - **Requires Prescription**: Yes (Prescription required)
 - **Usage**: Take 500mg three times daily for 7-10 days. Complete the full course even if symptoms improve.
 
 #### 4. **Aspirin** (אספירין)
 - **Active Ingredient**: Acetylsalicylic acid (חומצה אצטילסליצילית)
-- **Stock**: 200 units
+- **Purpose**: Pain relief, blood thinning, heart attack prevention (הקלה על כאבים, דילול דם, מניעת התקפי לב)
 - **Requires Prescription**: No (Over-the-counter)
 - **Usage**: Take 75-325mg once daily. Do not give to children under 16.
 
 #### 5. **Metformin** (מטפורמין)
 - **Active Ingredient**: Metformin hydrochloride (מטפורמין הידרוכלוריד)
-- **Stock**: 30 units
+- **Purpose**: Type 2 diabetes management (ניהול סוכרת מסוג 2)
 - **Requires Prescription**: Yes (Prescription required)
 - **Usage**: Take 500-1000mg twice daily with meals. Monitor blood sugar levels regularly.
 
-### Prescriptions (4 total)
+### Stock (5 entries)
+
+| Medication Name | Quantity |
+|----------------|----------|
+| Paracetamol | 150 |
+| Ibuprofen | 80 |
+| Amoxicillin | 45 |
+| Aspirin | 200 |
+| Metformin | 30 |
+
+**Note**: Stock is stored separately in the `stock` table, allowing independent inventory management.
+
+### Prescriptions (8 total)
 
 | User ID | User Name | Medication ID | Medication Name |
 |---------|-----------|---------------|-----------------|
@@ -169,8 +205,12 @@ CREATE TABLE prescriptions (
 | 1 | Alice Johnson | 5 | Metformin |
 | 3 | Carol White | 3 | Amoxicillin |
 | 5 | Eve Davis | 5 | Metformin |
+| 7 | Grace Wilson | 3 | Amoxicillin |
+| 7 | Grace Wilson | 5 | Metformin |
+| 9 | Iris Taylor | 3 | Amoxicillin |
+| 9 | Iris Taylor | 5 | Metformin |
 
-**Pattern**: Users with prescription permissions (1, 3, 5) have prescriptions for prescription-required medications.
+**Pattern**: Users with prescription permissions (1, 3, 5, 7, 9) have prescriptions for prescription-required medications (Amoxicillin and Metformin).
 
 ---
 
@@ -184,6 +224,8 @@ CREATE TABLE prescriptions (
 - **Async Initialization**: Ensures database is ready before queries
 - **Promisified SQLite**: Converts callback-based SQLite to Promise-based
 - **Bilingual Search**: Searches medications by English or Hebrew name (case-insensitive)
+- **Separate Stock Table**: Stock quantities are managed independently in the `stock` table
+- **Stock Resolution**: `checkStock` method resolves medication names (English/Hebrew) to canonical English name before querying stock table
 
 **Key Methods**:
 
@@ -194,7 +236,10 @@ async getUser(userId: number): Promise<User | null>
 // Get medication by name (English or Hebrew)
 async getMedicationByName(name: string): Promise<Medication | null>
 
-// Check stock level
+// Get all medication names
+async getAllMedications(): Promise<string[]>
+
+// Check stock level (queries stock table after resolving medication name)
 async checkStock(medicationName: string): Promise<number>
 
 // Check if user has valid prescription
@@ -203,8 +248,8 @@ async checkPrescription(userId: number, medicationName: string): Promise<boolean
 
 **Initialization Flow**:
 1. Create in-memory SQLite database
-2. Create three tables (users, medications, prescriptions)
-3. Insert synthetic data (10 users, 5 medications, 4 prescriptions)
+2. Create four tables (users, medications, stock, prescriptions)
+3. Insert synthetic data (10 users, 5 medications, 5 stock entries, 8 prescriptions)
 4. All queries wait for initialization to complete
 
 ---
@@ -213,7 +258,7 @@ async checkPrescription(userId: number, medicationName: string): Promise<boolean
 
 **Purpose**: Defines the functions available to the AI agent.
 
-**Three Tools**:
+**Four Tools**:
 
 #### Tool 1: `getMedicationByName`
 - **Input**: `name` (string) - Medication name in English or Hebrew
@@ -221,12 +266,18 @@ async checkPrescription(userId: number, medicationName: string): Promise<boolean
 - **Use Case**: When user asks "What is Paracetamol?" or "מה זה פאראצטמול?"
 
 #### Tool 2: `checkStock`
-- **Input**: `medicationName` (string)
-- **Output**: Stock count and availability status
-- **Use Case**: When user asks "Do you have Ibuprofen in stock?" or "Check availability"
+- **Input**: `medicationName` (string or array of strings) - Medication name in English or Hebrew, or array for multiple medications
+- **Output**: Stock count and availability status (or array of stock info for multiple medications)
+- **Use Case**: When user asks "Do you have Ibuprofen in stock?" or "Check availability" or "Show stock for all medications"
+- **Implementation**: Resolves medication name to English canonical name, then queries the `stock` table
 
-#### Tool 3: `checkPrescription`
-- **Input**: `userId` (number), `medicationName` (string)
+#### Tool 3: `getAllMedications`
+- **Input**: None
+- **Output**: Array of all medication names in English
+- **Use Case**: When user asks "Show me all medications" or "What medications do you have?" or requests stock overview
+
+#### Tool 4: `checkPrescription`
+- **Input**: `medicationName` (string) - userId is automatically provided from session context
 - **Output**: Whether user has valid prescription and can purchase
 - **Use Case**: When user asks "Can I buy Amoxicillin?" or "Do I have a prescription?"
 
@@ -259,8 +310,11 @@ async checkPrescription(userId: number, medicationName: string): Promise<boolean
 // Get medication information
 executeGetMedicationByName(name: string): Promise<ToolResult>
 
-// Check stock availability
-executeCheckStock(medicationName: string): Promise<ToolResult>
+// Get all medication names
+executeGetAllMedications(): Promise<ToolResult>
+
+// Check stock availability (supports single medication or array)
+executeCheckStock(medicationName: string | string[]): Promise<ToolResult>
 
 // Check prescription status
 executeCheckPrescription(userId: number, medicationName: string): Promise<ToolResult>
