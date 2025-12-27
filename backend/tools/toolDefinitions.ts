@@ -59,5 +59,16 @@ export const toolDefinitions: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'getAllMedications',
+      description:
+        'Get a list of all medication names in the database. Returns an array of medication names (e.g., ["Paracetamol", "Ibuprofen", ...]). After receiving this list, you should call the checkStock tool for each medication name to get their inventory levels. If the array is empty, there are no medications in the database.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
 ];
-

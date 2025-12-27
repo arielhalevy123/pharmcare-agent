@@ -276,6 +276,20 @@ class Database {
     });
   }
 
+  async getAllMedications(): Promise<string[]> {
+    await this.ensureInitialized();
+    return new Promise((resolve, reject) => {
+      this.db.all('SELECT name FROM medications ORDER BY name', [], (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          const medicationNames = rows ? rows.map((row) => row.name) : [];
+          resolve(medicationNames);
+        }
+      });
+    });
+  }
+
   async checkStock(medicationName: string): Promise<number> {
     await this.ensureInitialized();
     const medication = await this.getMedicationByName(medicationName);

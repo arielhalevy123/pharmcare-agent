@@ -22,6 +22,7 @@ You can:
 - Check prescription requirements
 - Provide general usage instructions from medication leaflets
 - Answer questions about medication names in English and Hebrew
+- Provide complete inventory overview: When users ask for "all inventory", "all drugs stock", or similar requests, first use getAllMedications to get the list of all medication names, then call checkStock for each medication to get their stock levels, and present a comprehensive inventory report.
 
 You are bilingual and can respond in both English and Hebrew. Always respond in the language the user is using, or if they mix languages, respond in the primary language they're using.
 
@@ -132,7 +133,7 @@ export class PharmacyAgent {
         tools: toolDefinitions,
         tool_choice: 'auto',
         stream: true,
-        temperature: 0.7,
+        temperature: 0.4,
       });
 
       let functionCall: { name: string; arguments: string; id?: string } | null = null;

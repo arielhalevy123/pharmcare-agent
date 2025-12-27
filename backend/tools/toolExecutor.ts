@@ -25,6 +25,9 @@ export async function executeTool(
       case 'checkPrescription':
         return await executeCheckPrescription(args.userId, args.medicationName);
 
+      case 'getAllMedications':
+        return await executeGetAllMedications();
+
       default:
         return {
           success: false,
@@ -72,6 +75,25 @@ async function executeGetMedicationByName(name: string): Promise<ToolResult> {
       usageInstructionsHebrew: medication.usageInstructionsHebrew,
     },
   };
+}
+
+async function executeGetAllMedications(): Promise<ToolResult> {
+  try {
+    const medicationNames = await db.getAllMedications();
+
+    return {
+      success: true,
+      data: {
+        medications: medicationNames,
+        count: medicationNames.length,
+      },
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || 'Failed to retrieve medications',
+    };
+  }
 }
 
 async function executeCheckStock(medicationName: string): Promise<ToolResult> {
@@ -154,4 +176,3 @@ async function executeCheckPrescription(
     },
   };
 }
-
