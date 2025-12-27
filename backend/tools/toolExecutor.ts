@@ -69,10 +69,11 @@ async function executeGetMedicationByName(name: string): Promise<ToolResult> {
       nameHebrew: medication.nameHebrew,
       activeIngredient: medication.activeIngredient,
       activeIngredientHebrew: medication.activeIngredientHebrew,
-      stock: medication.stock,
       requiresPrescription: medication.requiresPrescription,
       usageInstructions: medication.usageInstructions,
       usageInstructionsHebrew: medication.usageInstructionsHebrew,
+      purpose: medication.purpose,
+      purposeHebrew: medication.purposeHebrew,
     },
   };
 }
@@ -96,36 +97,113 @@ async function executeGetAllMedications(): Promise<ToolResult> {
   }
 }
 
-async function executeCheckStock(medicationName: string): Promise<ToolResult> {
-  // Input validation
-  if (!medicationName || typeof medicationName !== 'string' || medicationName.trim().length === 0) {
+async function executeCheckStock(medicationName: string | string[], rawArgs?: any): Promise<ToolResult> {
+  const timestamp = new Date().toISOString();
+  logger.log(`[${timestamp}] executeCheckStock called`, {
+    medicationName,
+    medicationNameType: typeof medicationName,
+    isArray: Array.isArray(medicationName),
+    rawArgs,
+  });
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:101',message:'executeCheckStock entry',data:{medicationName,isArray:Array.isArray(medicationName)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
+  // #endregion
+
+  // ---------------------------
+  // 1️⃣ Handle array input
+  // ---------------------------
+  if (Array.isArray(medicationName)) {
+    const results = [];
+    const errors = [];
+
+    for (const name of medicationName) {
+      if (!name || typeof name !== 'string' || name.trim().length === 0) {
+        errors.push(`Invalid medication name: ${name}`);
+        continue;
+      }
+
+      try {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:123',message:'before checkStock call',data:{inputName:name.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
+        // #endregion
+        const stock = await db.checkStock(name.trim());
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:125',message:'after checkStock call',data:{stock,inputName:name.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
+        // #endregion
+        const med = await db.getMedicationByName(name.trim());
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:128',message:'after getMedicationByName call',data:{found:!!med,englishName:med?.name,hebrewName:med?.nameHebrew},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+
+        if (!med) {
+          errors.push(`Medication "${name}" not found`);
+          continue;
+        }
+
+        results.push({
+          medicationName: med.name,
+          stock,
+          available: stock > 0,
+        });
+      } catch (error: any) {
+        errors.push(`Error checking stock for "${name}": ${error.message}`);
+      }
+    }
+
+    return {
+      success: true,
+      data: { medications: results, errors },
+    };
+  }
+
+  // --------------------------------------------------------------
+  // 2️⃣ Handle concatenated JSON: {}{}{}{} (the old wrong behavior)
+  // --------------------------------------------------------------
+  if (typeof medicationName !== 'string' || medicationName.trim() === '') {
+    const concatenated: string = rawArgs?.medicationName ?? '';
+
+    const matches = concatenated.match(/\{"medicationName":\s*"([^"]+)"\}/g);
+    if (matches && matches.length > 0) {
+      const names = matches.map(m => JSON.parse(m).medicationName);
+      logger.log(`[${timestamp}] Parsed concatenated medication names`, { names });
+      return await executeCheckStock(names);
+    }
+
     return {
       success: false,
       error: 'Medication name is required and must be a non-empty string',
     };
   }
 
-  const stock = await db.checkStock(medicationName.trim());
+  // ------------------------------
+  // 3️⃣ Single medication fallback
+  // ------------------------------
+  const medName = medicationName.trim();
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:169',message:'single medication path',data:{inputName:medName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
+  // #endregion
+  const stock = await db.checkStock(medName);
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:171',message:'after single checkStock',data:{stock,inputName:medName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
+  // #endregion
+  const med = await db.getMedicationByName(medName);
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:173',message:'after single getMedicationByName',data:{found:!!med,englishName:med?.name,hebrewName:med?.nameHebrew},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
 
-  // Check if medication exists
-  const medication = await db.getMedicationByName(medicationName.trim());
-  if (!medication) {
-    return {
-      success: false,
-      error: `Medication "${medicationName}" not found in our database`,
-    };
+  if (!med) {
+    return { success: false, error: `Medication "${medName}" not found in our database` };
   }
 
   return {
     success: true,
     data: {
-      medicationName: medication.name,
-      stock: stock,
+      medicationName: med.name,
+      stock,
       available: stock > 0,
     },
   };
 }
-
 async function executeCheckPrescription(
   userId: number,
   medicationName: string

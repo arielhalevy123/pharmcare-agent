@@ -2,33 +2,7 @@ import OpenAI from 'openai';
 import { toolDefinitions } from '../tools/toolDefinitions';
 import { executeTool } from '../tools/toolExecutor';
 import { logger } from '../utils/logger';
-
-const SAFETY_SYSTEM_PROMPT = `You are a professional pharmacy assistant AI. Your role is to provide factual medication information only.
-
-CRITICAL SAFETY RULES:
-1. NEVER provide medical diagnosis or suggest what condition a user might have
-2. NEVER provide medical advice beyond general medication information
-3. NEVER encourage users to purchase medications
-4. ALWAYS redirect users to healthcare professionals when:
-   - They ask about symptoms or conditions
-   - They ask for medical advice
-   - They ask about drug interactions (beyond basic information)
-   - They ask about side effects beyond what's in the medication leaflet
-   - They ask about dosage adjustments for their specific condition
-
-You can:
-- Provide general medication information (name, active ingredient, usage instructions)
-- Check medication availability and stock
-- Check prescription requirements
-- Provide general usage instructions from medication leaflets
-- Answer questions about medication names in English and Hebrew
-- Provide complete inventory overview: When users ask for "all inventory", "all drugs stock", or similar requests, first use getAllMedications to get the list of all medication names, then call checkStock for each medication to get their stock levels, and present a comprehensive inventory report.
-
-You are bilingual and can respond in both English and Hebrew. Always respond in the language the user is using, or if they mix languages, respond in the primary language they're using.
-
-When redirecting to a healthcare professional, be polite and clear:
-- "I recommend consulting with a healthcare professional for [specific reason]"
-- "For questions about [topic], please speak with your doctor or pharmacist"`;
+import { SAFETY_SYSTEM_PROMPT } from '../prompts/systemPrompt';
 
 export class PharmacyAgent {
   private openai: OpenAI;
@@ -138,7 +112,7 @@ export class PharmacyAgent {
 
       let functionCall: { name: string; arguments: string; id?: string } | null = null;
       let accumulatedContent = '';
-      let toolCallId = '';
+      let toolCallId = ''; // Reset for each iteration - tracks current tool call ID within this iteration
 
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta;
@@ -146,16 +120,22 @@ export class PharmacyAgent {
         // Handle function calls
         if (delta?.tool_calls) {
           for (const toolCall of delta.tool_calls) {
+            const chunkToolCallId = toolCall.id;
+            const currentToolCallId = chunkToolCallId || toolCallId;
+            
             if (toolCall.id) {
               toolCallId = toolCall.id;
             }
+
             if (toolCall.function) {
               if (!functionCall) {
+                // Use the toolCall.id directly, or toolCallId if id not present in this chunk
                 functionCall = {
                   name: toolCall.function.name || '',
                   arguments: toolCall.function.arguments || '',
-                  id: toolCallId,
+                  id: currentToolCallId,
                 };
+
                 // Emit tool call start event
                 yield {
                   type: 'tool_call',
@@ -166,16 +146,22 @@ export class PharmacyAgent {
                   },
                 };
               } else {
-                functionCall.arguments += toolCall.function.arguments || '';
-                // Update tool call arguments
-                yield {
-                  type: 'tool_call',
-                  data: {
-                    name: functionCall.name,
-                    arguments: functionCall.arguments,
-                    timestamp: new Date().toISOString(),
-                  },
-                };
+                // Only append arguments if the tool call ID matches (same tool call continuing)
+                // If IDs don't match, this is a different tool call - ignore it for now
+                // (The current design supports only one tool call per iteration)
+                if (functionCall.id === currentToolCallId) {
+                  functionCall.arguments += toolCall.function.arguments || '';
+
+                  // Update tool call arguments
+                  yield {
+                    type: 'tool_call',
+                    data: {
+                      name: functionCall.name,
+                      arguments: functionCall.arguments,
+                      timestamp: new Date().toISOString(),
+                    },
+                  };
+                }
               }
             }
           }

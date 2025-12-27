@@ -1,6 +1,6 @@
 # PharmaCare Agent - Complete Code & Database Explanation
 
-## 📋 Table of Contents
+## Table of Contents
 1. [Overall Architecture](#overall-architecture)
 2. [Database Structure](#database-structure)
 3. [Database Data](#database-data)
@@ -10,7 +10,7 @@
 
 ---
 
-## 🏗️ Overall Architecture
+## Overall Architecture
 
 The PharmaCare Agent is a **stateless conversational AI system** built with:
 
@@ -29,7 +29,7 @@ User → Frontend (HTML/JS) → Express API → PharmacyAgent → OpenAI API
 
 ---
 
-## 🗄️ Database Structure
+## Database Structure
 
 ### Database Type: SQLite (In-Memory)
 - **Location**: `:memory:` (resets on server restart)
@@ -110,22 +110,22 @@ CREATE TABLE prescriptions (
 
 ---
 
-## 📊 Database Data
+## Database Data
 
 ### Users (10 total)
 
 | ID | Name | Has Prescription Permission |
 |----|------|----------------------------|
-| 1 | Alice Johnson | ✅ Yes |
-| 2 | Bob Smith | ❌ No |
-| 3 | Carol White | ✅ Yes |
-| 4 | David Brown | ❌ No |
-| 5 | Eve Davis | ✅ Yes |
-| 6 | Frank Miller | ❌ No |
-| 7 | Grace Wilson | ✅ Yes |
-| 8 | Henry Moore | ❌ No |
-| 9 | Iris Taylor | ✅ Yes |
-| 10 | Jack Anderson | ❌ No |
+| 1 | Alice Johnson | Yes |
+| 2 | Bob Smith | No |
+| 3 | Carol White | Yes |
+| 4 | David Brown | No |
+| 5 | Eve Davis | Yes |
+| 6 | Frank Miller | No |
+| 7 | Grace Wilson | Yes |
+| 8 | Henry Moore | No |
+| 9 | Iris Taylor | Yes |
+| 10 | Jack Anderson | No |
 
 **Pattern**: Every other user (IDs 1, 3, 5, 7, 9) has prescription permissions.
 
@@ -134,31 +134,31 @@ CREATE TABLE prescriptions (
 #### 1. **Paracetamol** (פאראצטמול)
 - **Active Ingredient**: Acetaminophen (אצטאמינופן)
 - **Stock**: 150 units
-- **Requires Prescription**: ❌ No (Over-the-counter)
+- **Requires Prescription**: No (Over-the-counter)
 - **Usage**: Take 500-1000mg every 4-6 hours as needed. Do not exceed 4g per day.
 
 #### 2. **Ibuprofen** (איבופרופן)
 - **Active Ingredient**: Ibuprofen (איבופרופן)
 - **Stock**: 80 units
-- **Requires Prescription**: ❌ No (Over-the-counter)
+- **Requires Prescription**: No (Over-the-counter)
 - **Usage**: Take 200-400mg every 4-6 hours with food. Maximum 1200mg per day.
 
 #### 3. **Amoxicillin** (אמוקסיצילין)
 - **Active Ingredient**: Amoxicillin (אמוקסיצילין)
 - **Stock**: 45 units
-- **Requires Prescription**: ✅ Yes (Prescription required)
+- **Requires Prescription**: Yes (Prescription required)
 - **Usage**: Take 500mg three times daily for 7-10 days. Complete the full course even if symptoms improve.
 
 #### 4. **Aspirin** (אספירין)
 - **Active Ingredient**: Acetylsalicylic acid (חומצה אצטילסליצילית)
 - **Stock**: 200 units
-- **Requires Prescription**: ❌ No (Over-the-counter)
+- **Requires Prescription**: No (Over-the-counter)
 - **Usage**: Take 75-325mg once daily. Do not give to children under 16.
 
 #### 5. **Metformin** (מטפורמין)
 - **Active Ingredient**: Metformin hydrochloride (מטפורמין הידרוכלוריד)
 - **Stock**: 30 units
-- **Requires Prescription**: ✅ Yes (Prescription required)
+- **Requires Prescription**: Yes (Prescription required)
 - **Usage**: Take 500-1000mg twice daily with meals. Monitor blood sugar levels regularly.
 
 ### Prescriptions (4 total)
@@ -174,7 +174,7 @@ CREATE TABLE prescriptions (
 
 ---
 
-## 🔧 Backend Components
+## Backend Components
 
 ### 1. Database Module (`backend/db/database.ts`)
 
@@ -378,7 +378,7 @@ data: {"type":"done"}
 
 ---
 
-## 🔄 Data Flow
+## Data Flow
 
 ### Complete Request Flow:
 
@@ -446,7 +446,7 @@ Step 12: All events streamed to frontend
 
 ---
 
-## 🔀 Multi-Step Flows
+## Multi-Step Flows
 
 The agent supports complex multi-step reasoning through iterative function calling:
 
@@ -476,7 +476,7 @@ User: "I have a headache, should I take Aspirin?"
 
 ---
 
-## 🔐 Safety Mechanisms
+## Safety Mechanisms
 
 1. **Pre-filtering**: Regex patterns detect medical advice requests
 2. **System Prompt**: Explicit instructions to never diagnose or advise
@@ -485,7 +485,7 @@ User: "I have a headache, should I take Aspirin?"
 
 ---
 
-## 📝 Key Design Decisions
+## Key Design Decisions
 
 1. **In-Memory Database**: Fast, resets on restart (good for demos)
 2. **Stateless Agent**: Each request independent (scalable)
@@ -497,7 +497,7 @@ User: "I have a headache, should I take Aspirin?"
 
 ---
 
-## 🚀 Extending the System
+## Extending the System
 
 ### To Add a New Medication:
 1. Add entry to `medications` array in `database.ts`

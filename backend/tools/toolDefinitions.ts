@@ -6,7 +6,7 @@ export const toolDefinitions: ChatCompletionTool[] = [
     function: {
       name: 'getMedicationByName',
       description:
-        'Get detailed information about a medication by its name (supports both English and Hebrew names). Returns medication details including active ingredient, stock, prescription requirements, and usage instructions.',
+        'Get detailed information about a medication by its name (supports both English and Hebrew names). Returns medication details including active ingredient, prescription requirements, and usage instructions (does NOT include stock information).',
       parameters: {
         type: 'object',
         properties: {
@@ -24,13 +24,23 @@ export const toolDefinitions: ChatCompletionTool[] = [
     function: {
       name: 'checkStock',
       description:
-        'Check the current stock availability of a medication. Returns the number of units available.',
+        'Check current stock for one medication or a list of medications. Use a single string for one medication, or an array of strings for multiple medications.',
       parameters: {
         type: 'object',
         properties: {
           medicationName: {
-            type: 'string',
-            description: 'The name of the medication to check stock for',
+            // string | string[]
+            anyOf: [
+              {
+                type: 'string',
+                description: 'Single medication name to check stock for',
+              },
+              {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'List of medication names to check stock for',
+              },
+            ],
           },
         },
         required: ['medicationName'],
@@ -42,20 +52,20 @@ export const toolDefinitions: ChatCompletionTool[] = [
     function: {
       name: 'checkPrescription',
       description:
-        'Check if a user has a valid prescription for a specific medication. Returns true if the medication does not require a prescription or if the user has a valid prescription.',
+        'Check if a user has a valid prescription for a specific medication. Returns true if the medication does not require a prescription or if the user has a valid prescription. The userId is automatically provided from the session context - you should NOT ask the user for it.',
       parameters: {
         type: 'object',
         properties: {
           userId: {
             type: 'number',
-            description: 'The ID of the user to check prescription for',
+            description: 'The ID of the user to check prescription for (automatically provided from session - do not ask user for this)',
           },
           medicationName: {
             type: 'string',
             description: 'The name of the medication to check prescription for',
           },
         },
-        required: ['userId', 'medicationName'],
+        required: ['medicationName'], // userId is optional since it's auto-injected
       },
     },
   },
@@ -64,7 +74,7 @@ export const toolDefinitions: ChatCompletionTool[] = [
     function: {
       name: 'getAllMedications',
       description:
-        'Get a list of all medication names in the database. Returns an array of medication names (e.g., ["Paracetamol", "Ibuprofen", ...]). After receiving this list, you should call the checkStock tool for each medication name to get their inventory levels. If the array is empty, there are no medications in the database.',
+        'Get a list of all medication names in the database. Returns an array of medication names (e.g., ["Paracetamol", "Ibuprofen", ...]).',
       parameters: {
         type: 'object',
         properties: {},
