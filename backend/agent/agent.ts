@@ -3,6 +3,7 @@ import { toolDefinitions } from '../tools/toolDefinitions';
 import { executeTool } from '../tools/toolExecutor';
 import { logger } from '../utils/logger';
 import { SAFETY_SYSTEM_PROMPT } from '../prompts/systemPrompt';
+import { isMedicalAdvice, SAFETY_REDIRECT_REASON } from './safety';
 
 export class PharmacyAgent {
   private openai: OpenAI;
@@ -20,10 +21,9 @@ export class PharmacyAgent {
     logger.log(`[${timestamp}] Processing message from user ${userId}`, { message: userMessage });
 
     // Check for safety violations before processing
-    const safetyCheck = this.checkSafetyViolations(userMessage);
-    if (safetyCheck.needsRedirect) {
-      logger.log(`[${timestamp}] Safety redirect triggered`, { reason: safetyCheck.reason });
-      return this.streamRedirectMessage(safetyCheck.reason || 'This question requires medical advice. Please consult with a healthcare professional.');
+    if (isMedicalAdvice(userMessage)) {
+      logger.log(`[${timestamp}] Safety redirect triggered`, { reason: SAFETY_REDIRECT_REASON });
+      return this.streamRedirectMessage(SAFETY_REDIRECT_REASON);
     }
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -33,33 +33,6 @@ export class PharmacyAgent {
     ];
 
     return this.streamWithFunctionCalling(messages, userId);
-  }
-
-  private checkSafetyViolations(message: string): { needsRedirect: boolean; reason?: string } {
-    const lowerMessage = message.toLowerCase();
-    
-    // Patterns that indicate medical advice requests
-    const medicalAdvicePatterns = [
-      /should i take|should i use|can i take|can i use/i,
-      /what should i do for|how should i treat|how do i treat/i,
-      /is it safe for me|is it okay for me/i,
-      /i have (pain|fever|headache|symptoms?)/i,
-      /diagnos|diagnosis/i,
-      /side effect|adverse reaction/i,
-      /drug interaction|medication interaction/i,
-      /dosage for|dose for|how much should/i,
-    ];
-
-    for (const pattern of medicalAdvicePatterns) {
-      if (pattern.test(lowerMessage)) {
-        return {
-          needsRedirect: true,
-          reason: 'This question requires medical advice. Please consult with a healthcare professional.',
-        };
-      }
-    }
-
-    return { needsRedirect: false };
   }
 
   private async *streamRedirectMessage(reason: string): AsyncGenerator<{ type: 'text' | 'tool_call' | 'tool_result'; data: any }, void, unknown> {

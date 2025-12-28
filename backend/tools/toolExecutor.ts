@@ -1,4 +1,5 @@
-import { db, Medication } from '../db/database';
+import { db } from '../db/database';
+import { pharmacyService } from '../services/pharmacyService';
 import { logger } from '../utils/logger';
 
 export interface ToolResult {
@@ -52,7 +53,7 @@ async function executeGetMedicationByName(name: string): Promise<ToolResult> {
     };
   }
 
-  const medication = await db.getMedicationByName(name.trim());
+  const medication = await pharmacyService.getMedicationByName(name.trim());
 
   if (!medication) {
     return {
@@ -80,7 +81,7 @@ async function executeGetMedicationByName(name: string): Promise<ToolResult> {
 
 async function executeGetAllMedications(): Promise<ToolResult> {
   try {
-    const medicationNames = await db.getAllMedications();
+    const medicationNames = await pharmacyService.getAllMedications();
 
     return {
       success: true,
@@ -126,11 +127,11 @@ async function executeCheckStock(medicationName: string | string[], rawArgs?: an
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:123',message:'before checkStock call',data:{inputName:name.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
         // #endregion
-        const stock = await db.checkStock(name.trim());
+        const stock = await pharmacyService.checkStock(name.trim());
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:125',message:'after checkStock call',data:{stock,inputName:name.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
         // #endregion
-        const med = await db.getMedicationByName(name.trim());
+        const med = await pharmacyService.getMedicationByName(name.trim());
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:128',message:'after getMedicationByName call',data:{found:!!med,englishName:med?.name,hebrewName:med?.nameHebrew},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
@@ -182,11 +183,11 @@ async function executeCheckStock(medicationName: string | string[], rawArgs?: an
   // #region agent log
   fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:169',message:'single medication path',data:{inputName:medName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
   // #endregion
-  const stock = await db.checkStock(medName);
+  const stock = await pharmacyService.checkStock(medName);
   // #region agent log
   fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:171',message:'after single checkStock',data:{stock,inputName:medName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
   // #endregion
-  const med = await db.getMedicationByName(medName);
+  const med = await pharmacyService.getMedicationByName(medName);
   // #region agent log
   fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:173',message:'after single getMedicationByName',data:{found:!!med,englishName:med?.name,hebrewName:med?.nameHebrew},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
   // #endregion
@@ -233,7 +234,7 @@ async function executeCheckPrescription(
   }
 
   // Check if medication exists
-  const medication = await db.getMedicationByName(medicationName.trim());
+  const medication = await pharmacyService.getMedicationByName(medicationName.trim());
   if (!medication) {
     return {
       success: false,
@@ -241,7 +242,7 @@ async function executeCheckPrescription(
     };
   }
 
-  const hasPrescription = await db.checkPrescription(userId, medicationName.trim());
+  const hasPrescription = await pharmacyService.checkPrescription(userId, medicationName.trim());
 
   return {
     success: true,

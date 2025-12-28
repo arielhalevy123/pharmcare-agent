@@ -235,14 +235,22 @@ The agent enforces strict safety rules through multiple layers of protection:
 
 | Policy | Enforced by | Result |
 |--------|-------------|--------|
-| No medical diagnosis | Pre-filtering + System prompt | Immediate redirect to healthcare professional |
+| No medical diagnosis | Safety module + System prompt | Immediate redirect to healthcare professional |
 | No medical advice beyond general information | System prompt + Tool limitations | Provides only factual medication information from tools |
 | No encouragement to purchase medications | System prompt | Neutral responses, no sales pressure |
 | Must use tools before providing medication info | System prompt (rule #4) | Agent refuses to answer without calling `getMedicationByName` first |
 | No stock inference from medication properties | System prompt (rule #6) | Stock information only from `checkStock` tool |
-| Personal suitability questions redirect | Pre-filtering + System prompt (rule #8) | Redirects to doctor/pharmacist for personal advice |
+| Personal suitability questions redirect | Safety module + System prompt (rule #8) | Redirects to doctor/pharmacist for personal advice |
 | Usage instructions with disclaimer | System prompt (rule #9) | General leaflet info provided with medical advice disclaimer |
-| Automatic redirects for symptoms/conditions | Pre-filtering + System prompt (rule #10) | Redirects to healthcare professionals |
+| Automatic redirects for symptoms/conditions | Safety module + System prompt (rule #10) | Redirects to healthcare professionals |
+
+### Safety Module
+
+The safety module (`backend/agent/safety.ts`) provides comprehensive medical advice detection with:
+- **Pattern Detection**: Extensive regex patterns for both English and Hebrew to detect medical advice requests
+- **Bilingual Support**: Detects patterns in both languages simultaneously
+- **Centralized Logic**: All safety detection logic is consolidated in one module for easy maintenance
+- **Pattern Categories**: Detects personal suitability questions, symptom descriptions, treatment requests, diagnosis requests, side effects, interactions, and dosage questions
 
 ## Evaluation Plan
 
@@ -340,11 +348,14 @@ This section outlines a comprehensive testing plan to evaluate the system's func
 .
 ├── backend/
 │   ├── agent/
-│   │   └── agent.ts          # Main agent logic with OpenAI integration
+│   │   ├── agent.ts          # Main agent logic with OpenAI integration
+│   │   └── safety.ts         # Safety module for medical advice detection
 │   ├── db/
 │   │   └── database.ts       # Database setup and synthetic data
 │   ├── prompts/
 │   │   └── systemPrompt.ts   # System prompt with safety rules
+│   ├── services/
+│   │   └── pharmacyService.ts # Service layer for pharmacy operations
 │   ├── tools/
 │   │   ├── toolDefinitions.ts # OpenAI function definitions
 │   │   └── toolExecutor.ts   # Tool execution logic

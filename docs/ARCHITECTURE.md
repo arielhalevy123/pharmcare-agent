@@ -24,7 +24,9 @@ The PharmaCare Agent is a **stateless conversational AI system** built with:
 ```
 User → Frontend (HTML/JS) → Express API → PharmacyAgent → OpenAI API
                                               ↓
-                                         Tool Executor → Database
+                                         Safety Module (checks messages)
+                                              ↓
+                                         Tool Executor → PharmacyService → Database
 ```
 
 ---
@@ -262,7 +264,7 @@ async checkPrescription(userId: number, medicationName: string): Promise<boolean
 
 #### Tool 1: `getMedicationByName`
 - **Input**: `name` (string) - Medication name in English or Hebrew
-- **Output**: Full medication details including bilingual info, stock, prescription requirements, usage instructions
+- **Output**: Full medication details including bilingual info, prescription requirements, usage instructions
 - **Use Case**: When user asks "What is Paracetamol?" or "מה זה פאראצטמול?"
 
 #### Tool 2: `checkStock`
@@ -277,9 +279,10 @@ async checkPrescription(userId: number, medicationName: string): Promise<boolean
 - **Use Case**: When user asks "Show me all medications" or "What medications do you have?" or requests stock overview
 
 #### Tool 4: `checkPrescription`
-- **Input**: `medicationName` (string) - userId is automatically provided from session context
+- **Input**: `medicationName` (string) - **Note**: `userId` is automatically injected by the agent from session context, the AI should NOT provide it
 - **Output**: Whether user has valid prescription and can purchase
 - **Use Case**: When user asks "Can I buy Amoxicillin?" or "Do I have a prescription?"
+- **Implementation**: The agent automatically injects `userId` from the session before calling the tool executor
 
 **Tool Definition Format**:
 - Uses OpenAI's `ChatCompletionTool` format
@@ -297,12 +300,14 @@ async checkPrescription(userId: number, medicationName: string): Promise<boolean
 - **Error Handling**: Comprehensive error handling with descriptive messages
 - **Logging**: Logs all tool calls with timestamps
 - **Type Safety**: Returns structured `ToolResult` objects
+- **Service Layer Integration**: Uses `pharmacyService` for database operations instead of direct database access
 
 **Execution Flow**:
 1. Receive tool name and arguments
 2. Validate input parameters
 3. Execute appropriate tool function
-4. Return structured result with success/error status
+4. Tool function calls `pharmacyService` methods for database operations
+5. Return structured result with success/error status
 
 **Tool Functions**:
 
@@ -316,7 +321,7 @@ executeGetAllMedications(): Promise<ToolResult>
 // Check stock availability (supports single medication or array)
 executeCheckStock(medicationName: string | string[]): Promise<ToolResult>
 
-// Check prescription status
+// Check prescription status (userId is automatically injected by agent)
 executeCheckPrescription(userId: number, medicationName: string): Promise<ToolResult>
 ```
 
@@ -328,32 +333,87 @@ executeCheckPrescription(userId: number, medicationName: string): Promise<ToolRe
 
 ---
 
-### 4. Agent (`backend/agent/agent.ts`)
+### 4. Safety Module (`backend/agent/safety.ts`)
+
+**Purpose**: Centralized module for detecting medical advice requests and managing safety redirects.
+
+**Key Features**:
+- **Comprehensive Pattern Detection**: Extensive regex patterns covering multiple categories of medical advice requests
+- **Bilingual Support**: Detects patterns in both English and Hebrew simultaneously
+- **Centralized Logic**: All safety detection logic consolidated in one module for maintainability
+- **Pattern Categories**:
+  - Personal suitability questions ("should I take", "can I use", "is it safe for me")
+  - Symptom descriptions ("I have pain/fever/headache", "I'm feeling unwell")
+  - Treatment requests ("how should I treat", "what should I do for")
+  - Diagnosis requests ("what do I have", "do I have")
+  - Side effects and interactions ("side effects", "drug interactions", "will it interact")
+  - Dosage questions for personal use ("how much should I", "dosage for me")
+  - Personal health questions ("is it right for me", "will it work for me")
+  - Hebrew equivalents for all above categories
+
+**Exported Functions**:
+```typescript
+// Check if message contains medical advice requests
+isMedicalAdvice(message: string): boolean
+
+// Safety redirect reason constant
+SAFETY_REDIRECT_REASON: string
+```
+
+**Usage**: The agent module imports and uses `isMedicalAdvice()` to check messages before processing, triggering safety redirects when medical advice is detected.
+
+---
+
+### 5. Service Layer (`backend/services/pharmacyService.ts`)
+
+**Purpose**: Thin service layer that wraps database operations, providing a clean abstraction between tools and the database.
+
+**Key Features**:
+- **Abstraction Layer**: Decouples tool execution logic from direct database access
+- **Simplified Interface**: Provides clean, focused methods for pharmacy operations
+- **Maintainability**: Makes it easier to swap database implementations or add business logic
+
+**Service Methods**:
+```typescript
+// Get medication by name (English or Hebrew)
+getMedicationByName(name: string): Promise<Medication | null>
+
+// Get all medication names
+getAllMedications(): Promise<string[]>
+
+// Check stock availability
+checkStock(name: string): Promise<number>
+
+// Check prescription status
+checkPrescription(userId: number, medicationName: string): Promise<boolean>
+```
+
+**Usage**: The tool executor uses `pharmacyService` instead of directly accessing the database, improving separation of concerns and making the codebase more maintainable.
+
+---
+
+### 6. Agent (`backend/agent/agent.ts`)
 
 **Purpose**: Core AI agent that processes messages and orchestrates tool calls.
 
 **Key Features**:
-- **Safety First**: Pre-filters dangerous queries before sending to AI
+- **Safety First**: Pre-filters dangerous queries using the safety module before sending to AI
 - **Streaming**: Real-time streaming of AI responses
 - **Function Calling**: Multi-step tool execution with iteration
 - **Bilingual**: Responds in English or Hebrew based on user input
 - **Stateless**: Each request is independent (with optional conversation history)
 
 **Safety System**:
-- **Pre-filtering**: Checks for medical advice patterns before processing
-- **Pattern Detection**: Regex patterns for:
-  - "should I take", "can I use"
-  - "what should I do for", "how should I treat"
-  - "I have pain/fever/headache"
-  - "diagnosis", "side effects", "drug interactions"
-- **Automatic Redirect**: Redirects to healthcare professionals when needed
+- **Pre-filtering**: Uses `isMedicalAdvice()` from safety module to check messages before processing
+- **Automatic Redirect**: Redirects to healthcare professionals when medical advice is detected
+- **Pattern Detection**: Comprehensive pattern matching handled by the safety module
 
 **Processing Flow**:
 
 ```
 User Message
     ↓
-Safety Check (checkSafetyViolations)
+Safety Check (isMedicalAdvice from safety module)
     ↓
 [If unsafe] → Redirect Message
 [If safe] → Continue
@@ -364,7 +424,8 @@ Stream with Function Calling (streamWithFunctionCalling)
     ↓
 [AI decides to call tool?]
     ↓
-[Yes] → Execute Tool → Add Result to History → Loop Back
+[Yes] → Execute Tool (via toolExecutor) → Tool uses pharmacyService → Database
+         → Add Result to History → Loop Back
 [No] → Stream Final Response → Done
 ```
 
@@ -375,12 +436,13 @@ Stream with Function Calling (streamWithFunctionCalling)
   2. Call a tool
   3. Receive tool result
   4. Continue with next AI response
+- **Automatic Parameter Injection**: For `checkPrescription` tool, the agent automatically injects `userId` from the session context before execution (the AI should not provide it)
 - Example flow:
   ```
   User: "Can I buy Amoxicillin?"
   → AI calls getMedicationByName("Amoxicillin")
   → AI receives: requiresPrescription=true
-  → AI calls checkPrescription(userId=1, "Amoxicillin")
+  → AI calls checkPrescription("Amoxicillin") [userId automatically injected by agent]
   → AI receives: hasValidPrescription=true
   → AI responds: "Yes, you have a valid prescription..."
   ```
@@ -392,7 +454,7 @@ Stream with Function Calling (streamWithFunctionCalling)
 
 ---
 
-### 5. Express Server (`backend/index.ts`)
+### 7. Express Server (`backend/index.ts`)
 
 **Purpose**: HTTP API server that handles requests and serves frontend.
 
@@ -460,7 +522,7 @@ data: {"type":"done"}
 10. If tool call:
     - Agent emits tool_call event
     - Agent executes tool via toolExecutor
-    - Tool executor queries database
+    - Tool executor uses pharmacyService to query database
     - Agent emits tool_result event
     - Agent adds result to message history
     - Agent loops back to step 8
@@ -523,7 +585,7 @@ User: "How do I use Paracetamol?"
 ### Flow 3: Safety Redirect
 ```
 User: "I have a headache, should I take Aspirin?"
-→ Safety check detects "I have" + "should I take"
+→ Safety module (isMedicalAdvice) detects "I have" + "should I take"
 → Immediate redirect to healthcare professional
 → No tool calls needed
 ```
@@ -532,10 +594,12 @@ User: "I have a headache, should I take Aspirin?"
 
 ## Safety Mechanisms
 
-1. **Pre-filtering**: Regex patterns detect medical advice requests
-2. **System Prompt**: Explicit instructions to never diagnose or advise
-3. **Tool Limitations**: Tools only return factual data, no medical advice
-4. **Automatic Redirects**: Redirects to professionals when needed
+1. **Safety Module**: Centralized `safety.ts` module with comprehensive pattern detection for both English and Hebrew
+2. **Pre-filtering**: `isMedicalAdvice()` function detects medical advice requests before processing
+3. **System Prompt**: Explicit instructions to never diagnose or advise
+4. **Tool Limitations**: Tools only return factual data, no medical advice
+5. **Automatic Redirects**: Redirects to healthcare professionals when medical advice is detected
+6. **Service Layer**: Clean abstraction layer between tools and database operations
 
 ---
 
