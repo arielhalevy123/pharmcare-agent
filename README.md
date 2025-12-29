@@ -6,8 +6,19 @@ A stateless real-time conversational AI pharmacy assistant that provides factual
 
 Watch the system in action:
 
-- **[Test English Flow](screenshots/test%20english%20flow.mov)** - Demonstration of the system working with English queries
-- **[Hebrew Flow](screenshots/hebrew%20flow.mov)** - Demonstration of the system working with Hebrew queries
+### English Demo
+
+<video width="800" controls>
+  <source src="screenshots/english-demo.mp4" type="video/mp4">
+  Your browser does not support the video tag. [Download the video](screenshots/english-demo.mp4)
+</video>
+
+### Hebrew Demo
+
+<video width="800" controls>
+  <source src="screenshots/hebrew-demo.mp4" type="video/mp4">
+  Your browser does not support the video tag. [Download the video](screenshots/hebrew-demo.mp4)
+</video>
 
 ## Features
 
