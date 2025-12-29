@@ -24,10 +24,6 @@ if (!apiKey) {
 
 const agent = new PharmacyAgent(apiKey);
 
-// Store conversation history (in-memory, stateless per request)
-// In production, you'd use a proper session store
-const conversationHistory: Map<string, Array<{ role: 'user' | 'assistant'; content: string }>> = new Map();
-
 // Chat endpoint with streaming
 app.post('/chat', async (req, res) => {
   const { message, userId } = req.body;
@@ -41,9 +37,6 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'userId is required and must be a number' });
   }
 
-  const sessionKey = `user_${userId}`;
-  const history = conversationHistory.get(sessionKey) || [];
-
   // Set up SSE headers for streaming
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -52,17 +45,11 @@ app.post('/chat', async (req, res) => {
 
   try {
     // Stream the response
-    const eventStream = await agent.processMessage(message, userId, history);
+    const eventStream = await agent.processMessage(message, userId);
     for await (const event of eventStream) {
       // Send event (text, tool_call, or tool_result)
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     }
-
-    // Update conversation history
-    history.push({ role: 'user', content: message });
-    // Note: We don't have the full assistant response here in streaming mode
-    // In a production system, you'd accumulate it
-    conversationHistory.set(sessionKey, history);
 
     // Send completion signal
     res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
