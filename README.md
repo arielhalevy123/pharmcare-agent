@@ -8,17 +8,15 @@ Watch the system in action:
 
 ### English Demo
 
-<video width="800" controls>
-  <source src="screenshots/english-demo.mp4" type="video/mp4">
-  Your browser does not support the video tag. [Download the video](screenshots/english-demo.mp4)
-</video>
+Click the link below to watch the English demo video directly on GitHub:
+
+**[▶️ Watch English Demo](screenshots/english-demo.mp4)**
 
 ### Hebrew Demo
 
-<video width="800" controls>
-  <source src="screenshots/hebrew-demo.mp4" type="video/mp4">
-  Your browser does not support the video tag. [Download the video](screenshots/hebrew-demo.mp4)
-</video>
+Click the link below to watch the Hebrew demo video directly on GitHub:
+
+**[▶️ Watch Hebrew Demo](screenshots/hebrew-demo.mp4)**
 
 ## Features
 
