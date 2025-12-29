@@ -2,6 +2,13 @@
 
 A stateless real-time conversational AI pharmacy assistant that provides factual medication information in English and Hebrew.
 
+## Demo Videos
+
+Watch the system in action:
+
+- **[Test English Flow](screenshots/test%20english%20flow.mov)** - Demonstration of the system working with English queries
+- **[Hebrew Flow](screenshots/hebrew%20flow.mov)** - Demonstration of the system working with Hebrew queries
+
 ## Features
 
 - **AI-Powered Assistant**: Uses OpenAI GPT-4o with function calling
