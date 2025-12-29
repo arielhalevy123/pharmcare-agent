@@ -24,7 +24,7 @@ The PharmaCare Agent is a **stateless conversational AI system** built with:
 ```
 User → Frontend (HTML/JS) → Express API → PharmacyAgent → OpenAI API
                                               ↓
-                                         Tool Executor → PharmacyService → Database
+                                         Tool Executor → Database
 ```
 
 ---
@@ -261,37 +261,26 @@ async checkPrescription(userId: number, medicationName: string): Promise<boolean
 **Four Tools**:
 
 #### Tool 1: `getMedicationByName`
-- **Input**: 
-  - `name` (string) - Medication name in English or Hebrew
-  - `language` (number, optional) - Language preference: `1` = English (default), `0` = Hebrew
-- **Output**: Full medication details in the requested language (name, active ingredient, usage instructions, purpose, prescription requirements)
+- **Input**: `name` (string) - Medication name in English or Hebrew
+- **Output**: Full medication details including bilingual info, prescription requirements, usage instructions
 - **Use Case**: When user asks "What is Paracetamol?" or "מה זה פאראצטמול?"
-- **Language Handling**: Returns medication information in the requested language to ensure consistency with the AI's response language
 
 #### Tool 2: `checkStock`
-- **Input**: 
-  - `medicationName` (string or array of strings) - Medication name in English or Hebrew, or array for multiple medications
-  - `language` (number, optional) - Language preference: `1` = English (default), `0` = Hebrew
-- **Output**: Stock count and availability status with medication names in the requested language (or array of stock info for multiple medications)
+- **Input**: `medicationName` (string or array of strings) - Medication name in English or Hebrew, or array for multiple medications
+- **Output**: Stock count and availability status (or array of stock info for multiple medications)
 - **Use Case**: When user asks "Do you have Ibuprofen in stock?" or "Check availability" or "Show stock for all medications"
-- **Implementation**: Resolves medication name to English canonical name, then queries the `stock` table, returns medication names in requested language
-- **Language Handling**: Returns medication names in the requested language to match the AI's response language
+- **Implementation**: Resolves medication name to English canonical name, then queries the `stock` table
 
 #### Tool 3: `getAllMedications`
-- **Input**: 
-  - `language` (number, optional) - Language preference: `1` = English (default), `0` = Hebrew
-- **Output**: Array of all medication names in the requested language (English or Hebrew)
+- **Input**: None
+- **Output**: Array of all medication names in English
 - **Use Case**: When user asks "Show me all medications" or "What medications do you have?" or requests stock overview
-- **Language Handling**: Returns medication names in the requested language to ensure consistency
 
 #### Tool 4: `checkPrescription`
-- **Input**: 
-  - `medicationName` (string) - **Note**: `userId` is automatically injected by the agent from session context, the AI should NOT provide it
-  - `language` (number, optional) - Language preference: `1` = English (default), `0` = Hebrew
-- **Output**: Whether user has valid prescription and can purchase, with medication name in the requested language
+- **Input**: `medicationName` (string) - **Note**: `userId` is automatically injected by the agent from session context, the AI should NOT provide it
+- **Output**: Whether user has valid prescription and can purchase
 - **Use Case**: When user asks "Can I buy Amoxicillin?" or "Do I have a prescription?"
 - **Implementation**: The agent automatically injects `userId` from the session before calling the tool executor
-- **Language Handling**: Returns medication name in the requested language to match the AI's response language
 
 **Tool Definition Format**:
 - Uses OpenAI's `ChatCompletionTool` format
@@ -309,35 +298,28 @@ async checkPrescription(userId: number, medicationName: string): Promise<boolean
 - **Error Handling**: Comprehensive error handling with descriptive messages
 - **Logging**: Logs all tool calls with timestamps
 - **Type Safety**: Returns structured `ToolResult` objects
-- **Service Layer Integration**: Uses `pharmacyService` for database operations instead of direct database access
 
 **Execution Flow**:
 1. Receive tool name and arguments
 2. Validate input parameters
 3. Execute appropriate tool function
-4. Tool function calls `pharmacyService` methods for database operations
-5. Return structured result with success/error status
+4. Return structured result with success/error status
 
 **Tool Functions**:
 
 ```typescript
-// Get medication information (returns data in requested language)
-executeGetMedicationByName(name: string, language?: number): Promise<ToolResult>
+// Get medication information
+executeGetMedicationByName(name: string): Promise<ToolResult>
 
-// Get all medication names (returns names in requested language)
-executeGetAllMedications(language?: number): Promise<ToolResult>
+// Get all medication names
+executeGetAllMedications(): Promise<ToolResult>
 
-// Check stock availability (supports single medication or array, returns names in requested language)
-executeCheckStock(medicationName: string | string[], language?: number): Promise<ToolResult>
+// Check stock availability (supports single medication or array)
+executeCheckStock(medicationName: string | string[]): Promise<ToolResult>
 
-// Check prescription status (userId is automatically injected by agent, returns name in requested language)
-executeCheckPrescription(userId: number, medicationName: string, language?: number): Promise<ToolResult>
+// Check prescription status (userId is automatically injected by agent)
+executeCheckPrescription(userId: number, medicationName: string): Promise<ToolResult>
 ```
-
-**Language Parameter**:
-- `language: 1` (or omitted) = English - returns English medication names and information
-- `language: 0` = Hebrew - returns Hebrew medication names and information
-- The AI agent automatically includes this parameter based on the user's message language to ensure consistency
 
 **Error Handling**:
 - Invalid input → Returns error with descriptive message
@@ -347,57 +329,43 @@ executeCheckPrescription(userId: number, medicationName: string, language?: numb
 
 ---
 
-### 4. Service Layer (`backend/services/pharmacyService.ts`)
-
-**Purpose**: Thin service layer that wraps database operations, providing a clean abstraction between tools and the database.
-
-**Key Features**:
-- **Abstraction Layer**: Decouples tool execution logic from direct database access
-- **Simplified Interface**: Provides clean, focused methods for pharmacy operations
-- **Maintainability**: Makes it easier to swap database implementations or add business logic
-
-**Service Methods**:
-```typescript
-// Get medication by name (English or Hebrew)
-getMedicationByName(name: string): Promise<Medication | null>
-
-// Get all medication names
-getAllMedications(): Promise<string[]>
-
-// Check stock availability
-checkStock(name: string): Promise<number>
-
-// Check prescription status
-checkPrescription(userId: number, medicationName: string): Promise<boolean>
-```
-
-**Usage**: The tool executor uses `pharmacyService` instead of directly accessing the database, improving separation of concerns and making the codebase more maintainable.
-
----
-
-### 5. Agent (`backend/agent/agent.ts`)
+### 4. Agent (`backend/agent/agent.ts`)
 
 **Purpose**: Core AI agent that processes messages and orchestrates tool calls.
 
 **Key Features**:
+- **Safety First**: Pre-filters dangerous queries before sending to AI
 - **Streaming**: Real-time streaming of AI responses
 - **Function Calling**: Multi-step tool execution with iteration
 - **Bilingual**: Responds in English or Hebrew based on user input
-- **Stateless**: Each request is completely independent - no conversation history is maintained
+- **Stateless**: Each request is independent (with optional conversation history)
+
+**Safety System**:
+- **Pre-filtering**: Checks for medical advice patterns before processing
+- **Pattern Detection**: Regex patterns for:
+  - "should I take", "can I use"
+  - "what should I do for", "how should I treat"
+  - "I have pain/fever/headache"
+  - "diagnosis", "side effects", "drug interactions"
+- **Automatic Redirect**: Redirects to healthcare professionals when needed
 
 **Processing Flow**:
 
 ```
 User Message
     ↓
-Build Message Array (system prompt + user message)
+Safety Check (checkSafetyViolations)
+    ↓
+[If unsafe] → Redirect Message
+[If safe] → Continue
+    ↓
+Build Message History (system prompt + conversation + user message)
     ↓
 Stream with Function Calling (streamWithFunctionCalling)
     ↓
 [AI decides to call tool?]
     ↓
-[Yes] → Execute Tool (via toolExecutor) → Tool uses pharmacyService → Database
-         → Add Result to History → Loop Back
+[Yes] → Execute Tool → Add Result to History → Loop Back
 [No] → Stream Final Response → Done
 ```
 
@@ -408,25 +376,15 @@ Stream with Function Calling (streamWithFunctionCalling)
   2. Call a tool
   3. Receive tool result
   4. Continue with next AI response
-- **Automatic Parameter Injection**: 
-  - For `checkPrescription` tool, the agent automatically injects `userId` from the session context before execution (the AI should not provide it)
-  - The AI agent automatically includes `language` parameter in tool calls based on the user's message language
-- **Language Consistency**: When user writes in Hebrew, AI includes `language: 0` in all tool calls. When user writes in English, AI includes `language: 1` (or omits it, as 1 is default). This ensures medication names in responses match the response language.
+- **Automatic Parameter Injection**: For `checkPrescription` tool, the agent automatically injects `userId` from the session context before execution (the AI should not provide it)
 - Example flow:
   ```
-  User: "Can I buy Amoxicillin?" (English)
-  → AI calls getMedicationByName("Amoxicillin", language: 1)
-  → AI receives: { name: "Amoxicillin", requiresPrescription: true, ... }
-  → AI calls checkPrescription("Amoxicillin", language: 1) [userId automatically injected by agent]
-  → AI receives: { medicationName: "Amoxicillin", hasValidPrescription: true, ... }
-  → AI responds: "Yes, you have a valid prescription for Amoxicillin..." (English with English medication name)
-  
-  User: "אני יכול לקנות אמוקסיצילין?" (Hebrew)
-  → AI calls getMedicationByName("אמוקסיצילין", language: 0)
-  → AI receives: { name: "אמוקסיצילין", requiresPrescription: true, ... }
-  → AI calls checkPrescription("אמוקסיצילין", language: 0) [userId automatically injected]
-  → AI receives: { medicationName: "אמוקסיצילין", hasValidPrescription: true, ... }
-  → AI responds: "כן, יש לך מרשם תקף לאמוקסיצילין..." (Hebrew with Hebrew medication name)
+  User: "Can I buy Amoxicillin?"
+  → AI calls getMedicationByName("Amoxicillin")
+  → AI receives: requiresPrescription=true
+  → AI calls checkPrescription("Amoxicillin") [userId automatically injected by agent]
+  → AI receives: hasValidPrescription=true
+  → AI responds: "Yes, you have a valid prescription..."
   ```
 
 **Event Types Emitted**:
@@ -436,7 +394,7 @@ Stream with Function Calling (streamWithFunctionCalling)
 
 ---
 
-### 6. Express Server (`backend/index.ts`)
+### 5. Express Server (`backend/index.ts`)
 
 **Purpose**: HTTP API server that handles requests and serves frontend.
 
@@ -447,9 +405,11 @@ Stream with Function Calling (streamWithFunctionCalling)
 - **Output**: Server-Sent Events (SSE) stream
 - **Flow**:
   1. Validate input
-  2. Set up SSE headers
-  3. Stream events from agent (no conversation history - fully stateless)
-  4. Send completion signal
+  2. Get conversation history for user
+  3. Set up SSE headers
+  4. Stream events from agent
+  5. Update conversation history
+  6. Send completion signal
 
 **SSE Event Format**:
 ```
@@ -467,10 +427,10 @@ data: {"type":"done"}
 - **Output**: Serves `frontend/index.html`
 - **Purpose**: Frontend application
 
-**Stateless Design**:
-- The backend is fully stateless - no conversation history or session data is stored
-- Each request is processed independently without any prior context
-- If conversation history is needed, it should be managed in the frontend and sent with requests
+**Conversation History**:
+- Stored in-memory: `Map<sessionKey, messageHistory[]>`
+- Session key format: `user_${userId}`
+- Note: In production, use Redis or database for persistence
 
 ---
 
@@ -485,36 +445,40 @@ data: {"type":"done"}
    ↓
 3. Express validates input
    ↓
-4. Express calls agent.processMessage(message, userId) - no history (fully stateless)
+4. Express gets conversation history (if any)
    ↓
-5. Agent builds message array with system prompt + user message only
+5. Express calls agent.processMessage(message, userId, history)
    ↓
-7. Agent calls OpenAI API with streaming
+6. Agent checks safety violations
    ↓
-8. OpenAI responds with:
+7. Agent builds message array with system prompt
+   ↓
+8. Agent calls OpenAI API with streaming
+   ↓
+9. OpenAI responds with:
    - Text chunks (streamed immediately)
    - Tool call requests (when needed)
    ↓
-9. If tool call:
+10. If tool call:
     - Agent emits tool_call event
     - Agent executes tool via toolExecutor
-    - Tool executor uses pharmacyService to query database
+    - Tool executor queries database
     - Agent emits tool_result event
-    - Agent adds result to message array (for current request only)
-   - Agent loops back to step 6
+    - Agent adds result to message history
+    - Agent loops back to step 8
    ↓
-10. If no tool call:
-   - Agent streams final text response
-   - Agent emits completion
+11. If no tool call:
+    - Agent streams final text response
+    - Agent emits completion
    ↓
-11. Express streams all events to frontend via SSE
+12. Express streams all events to frontend via SSE
    ↓
-12. Frontend displays:
-   - Streaming text in real-time
-   - Tool calls in yellow boxes
-   - Tool results in blue boxes
+13. Frontend displays:
+    - Streaming text in real-time
+    - Tool calls in yellow boxes
+    - Tool results in blue boxes
    ↓
-13. User sees complete response
+14. User sees complete response
 ```
 
 ### Example Multi-Step Flow:
@@ -523,16 +487,17 @@ data: {"type":"done"}
 
 ```
 Step 1: Agent receives message
-Step 2: OpenAI decides to call getMedicationByName("Amoxicillin")
-Step 3: Tool executor queries database
-Step 4: Returns: { requiresPrescription: true, stock: 45, ... }
-Step 5: Agent adds result to history, continues
-Step 6: OpenAI sees prescription required, calls checkPrescription(1, "Amoxicillin")
-Step 7: Tool executor checks prescriptions table
-Step 8: Returns: { hasValidPrescription: true, canPurchase: true }
-Step 9: Agent adds result, continues
-Step 10: OpenAI generates final response: "Yes, you have a valid prescription..."
-Step 11: All events streamed to frontend
+Step 2: Safety check passes
+Step 3: OpenAI decides to call getMedicationByName("Amoxicillin")
+Step 4: Tool executor queries database
+Step 5: Returns: { requiresPrescription: true, stock: 45, ... }
+Step 6: Agent adds result to history, continues
+Step 7: OpenAI sees prescription required, calls checkPrescription(1, "Amoxicillin")
+Step 8: Tool executor checks prescriptions table
+Step 9: Returns: { hasValidPrescription: true, canPurchase: true }
+Step 10: Agent adds result, continues
+Step 11: OpenAI generates final response: "Yes, you have a valid prescription..."
+Step 12: All events streamed to frontend
 ```
 
 ---
@@ -557,26 +522,34 @@ User: "How do I use Paracetamol?"
 → AI provides instructions + safety warnings from system prompt
 ```
 
+### Flow 3: Safety Redirect
+```
+User: "I have a headache, should I take Aspirin?"
+→ Safety check detects "I have" + "should I take"
+→ Immediate redirect to healthcare professional
+→ No tool calls needed
+```
+
 ---
 
 ## Safety Mechanisms
 
-1. **System Prompt**: Explicit instructions to never diagnose or advise
-2. **Tool Limitations**: Tools only return factual data, no medical advice
-3. **Service Layer**: Clean abstraction layer between tools and database operations
+1. **Pre-filtering**: Regex patterns detect medical advice requests
+2. **System Prompt**: Explicit instructions to never diagnose or advise
+3. **Tool Limitations**: Tools only return factual data, no medical advice
+4. **Automatic Redirects**: Redirects to professionals when needed
 
 ---
 
 ## Key Design Decisions
 
 1. **In-Memory Database**: Fast, resets on restart (good for demos)
-2. **Fully Stateless Backend**: No server-side state storage - each request is completely independent (highly scalable, easy horizontal scaling)
+2. **Stateless Agent**: Each request independent (scalable)
 3. **Streaming Responses**: Real-time UX, better perceived performance
 4. **Tool Call Visualization**: Users see what tools are being used (transparency)
-5. **Bilingual Support**: English + Hebrew for broader accessibility with automatic language matching
-6. **Language Consistency**: Tools return medication names in the requested language to ensure responses are fully in one language (no mixing)
-7. **Type Safety**: Full TypeScript types throughout
-8. **Error Handling**: Comprehensive validation and error messages
+5. **Bilingual Support**: English + Hebrew for broader accessibility
+6. **Type Safety**: Full TypeScript types throughout
+7. **Error Handling**: Comprehensive validation and error messages
 
 ---
 
@@ -597,5 +570,5 @@ User: "How do I use Paracetamol?"
 
 ---
 
-This architecture provides a solid foundation for a production pharmacy assistant with bilingual support and real-time streaming capabilities.
+This architecture provides a solid foundation for a production pharmacy assistant with proper safety measures, bilingual support, and real-time streaming capabilities.
 

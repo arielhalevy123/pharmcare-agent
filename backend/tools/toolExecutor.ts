@@ -8,6 +8,12 @@ export interface ToolResult {
   error?: string;
 }
 
+/**
+ * Executes a tool by name with the provided arguments
+ * @param toolName - Name of the tool to execute
+ * @param args - Arguments object for the tool
+ * @returns ToolResult with success status and data or error message
+ */
 export async function executeTool(
   toolName: string,
   args: any
@@ -18,16 +24,16 @@ export async function executeTool(
   try {
     switch (toolName) {
       case 'getMedicationByName':
-        return await executeGetMedicationByName(args.name);
+        return await executeGetMedicationByName(args.name, args.language);
 
       case 'checkStock':
-        return await executeCheckStock(args.medicationName);
+        return await executeCheckStock(args.medicationName, args.language);
 
       case 'checkPrescription':
-        return await executeCheckPrescription(args.userId, args.medicationName);
+        return await executeCheckPrescription(args.userId, args.medicationName, args.language);
 
       case 'getAllMedications':
-        return await executeGetAllMedications();
+        return await executeGetAllMedications(args.language);
 
       default:
         return {
@@ -44,7 +50,13 @@ export async function executeTool(
   }
 }
 
-async function executeGetMedicationByName(name: string): Promise<ToolResult> {
+/**
+ * Executes the getMedicationByName tool to retrieve medication information
+ * @param name - Medication name in English or Hebrew
+ * @param language - Language preference: 1 = English (default), 0 = Hebrew
+ * @returns ToolResult with medication data or error message
+ */
+async function executeGetMedicationByName(name: string, language: number = 1): Promise<ToolResult> {
   // Input validation
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return {
@@ -62,26 +74,62 @@ async function executeGetMedicationByName(name: string): Promise<ToolResult> {
     };
   }
 
-  return {
-    success: true,
-    data: {
-      id: medication.id,
-      name: medication.name,
-      nameHebrew: medication.nameHebrew,
-      activeIngredient: medication.activeIngredient,
-      activeIngredientHebrew: medication.activeIngredientHebrew,
-      requiresPrescription: medication.requiresPrescription,
-      usageInstructions: medication.usageInstructions,
-      usageInstructionsHebrew: medication.usageInstructionsHebrew,
-      purpose: medication.purpose,
-      purposeHebrew: medication.purposeHebrew,
-    },
-  };
+  // Return data in the requested language
+  if (language === 0) {
+    // Hebrew
+    return {
+      success: true,
+      data: {
+        id: medication.id,
+        name: medication.nameHebrew,
+        activeIngredient: medication.activeIngredientHebrew,
+        requiresPrescription: medication.requiresPrescription,
+        usageInstructions: medication.usageInstructionsHebrew,
+        purpose: medication.purposeHebrew,
+      },
+    };
+  } else {
+    // English (default)
+    return {
+      success: true,
+      data: {
+        id: medication.id,
+        name: medication.name,
+        activeIngredient: medication.activeIngredient,
+        requiresPrescription: medication.requiresPrescription,
+        usageInstructions: medication.usageInstructions,
+        purpose: medication.purpose,
+      },
+    };
+  }
 }
 
-async function executeGetAllMedications(): Promise<ToolResult> {
+/**
+ * Executes the getAllMedications tool to retrieve all medication names
+ * @param language - Language preference: 1 = English (default), 0 = Hebrew
+ * @returns ToolResult with array of medication names
+ */
+async function executeGetAllMedications(language: number = 1): Promise<ToolResult> {
   try {
     const medicationNames = await pharmacyService.getAllMedications();
+    
+    // Get Hebrew names if requested
+    if (language === 0) {
+      const medicationsWithHebrew = await Promise.all(
+        medicationNames.map(async (name) => {
+          const med = await pharmacyService.getMedicationByName(name);
+          return med ? med.nameHebrew : name;
+        })
+      );
+      
+      return {
+        success: true,
+        data: {
+          medications: medicationsWithHebrew,
+          count: medicationsWithHebrew.length,
+        },
+      };
+    }
 
     return {
       success: true,
@@ -98,7 +146,14 @@ async function executeGetAllMedications(): Promise<ToolResult> {
   }
 }
 
-async function executeCheckStock(medicationName: string | string[], rawArgs?: any): Promise<ToolResult> {
+/**
+ * Executes the checkStock tool to retrieve stock information for one or more medications
+ * @param medicationName - Single medication name (string) or array of medication names
+ * @param language - Language preference: 1 = English (default), 0 = Hebrew
+ * @param rawArgs - Optional raw arguments for handling edge cases
+ * @returns ToolResult with stock information
+ */
+async function executeCheckStock(medicationName: string | string[], language: number = 1, rawArgs?: any): Promise<ToolResult> {
   const timestamp = new Date().toISOString();
   logger.log(`[${timestamp}] executeCheckStock called`, {
     medicationName,
@@ -106,9 +161,6 @@ async function executeCheckStock(medicationName: string | string[], rawArgs?: an
     isArray: Array.isArray(medicationName),
     rawArgs,
   });
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:101',message:'executeCheckStock entry',data:{medicationName,isArray:Array.isArray(medicationName)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
-  // #endregion
 
   // ---------------------------
   // 1️⃣ Handle array input
@@ -124,17 +176,8 @@ async function executeCheckStock(medicationName: string | string[], rawArgs?: an
       }
 
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:123',message:'before checkStock call',data:{inputName:name.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
-        // #endregion
         const stock = await pharmacyService.checkStock(name.trim());
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:125',message:'after checkStock call',data:{stock,inputName:name.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
-        // #endregion
         const med = await pharmacyService.getMedicationByName(name.trim());
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:128',message:'after getMedicationByName call',data:{found:!!med,englishName:med?.name,hebrewName:med?.nameHebrew},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
 
         if (!med) {
           errors.push(`Medication "${name}" not found`);
@@ -142,7 +185,7 @@ async function executeCheckStock(medicationName: string | string[], rawArgs?: an
         }
 
         results.push({
-          medicationName: med.name,
+          medicationName: language === 0 ? med.nameHebrew : med.name,
           stock,
           available: stock > 0,
         });
@@ -167,7 +210,7 @@ async function executeCheckStock(medicationName: string | string[], rawArgs?: an
     if (matches && matches.length > 0) {
       const names = matches.map(m => JSON.parse(m).medicationName);
       logger.log(`[${timestamp}] Parsed concatenated medication names`, { names });
-      return await executeCheckStock(names);
+      return await executeCheckStock(names, language);
     }
 
     return {
@@ -180,17 +223,8 @@ async function executeCheckStock(medicationName: string | string[], rawArgs?: an
   // 3️⃣ Single medication fallback
   // ------------------------------
   const medName = medicationName.trim();
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:169',message:'single medication path',data:{inputName:medName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
-  // #endregion
   const stock = await pharmacyService.checkStock(medName);
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:171',message:'after single checkStock',data:{stock,inputName:medName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D,E'})}).catch(()=>{});
-  // #endregion
   const med = await pharmacyService.getMedicationByName(medName);
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'toolExecutor.ts:173',message:'after single getMedicationByName',data:{found:!!med,englishName:med?.name,hebrewName:med?.nameHebrew},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
 
   if (!med) {
     return { success: false, error: `Medication "${medName}" not found in our database` };
@@ -199,15 +233,23 @@ async function executeCheckStock(medicationName: string | string[], rawArgs?: an
   return {
     success: true,
     data: {
-      medicationName: med.name,
+      medicationName: language === 0 ? med.nameHebrew : med.name,
       stock,
       available: stock > 0,
     },
   };
 }
+/**
+ * Executes the checkPrescription tool to verify if a user has a valid prescription
+ * @param userId - User ID to check
+ * @param medicationName - Medication name in English or Hebrew
+ * @param language - Language preference: 1 = English (default), 0 = Hebrew
+ * @returns ToolResult with prescription status and purchase eligibility
+ */
 async function executeCheckPrescription(
   userId: number,
-  medicationName: string
+  medicationName: string,
+  language: number = 1
 ): Promise<ToolResult> {
   // Input validation
   if (!userId || typeof userId !== 'number' || userId <= 0) {
@@ -248,7 +290,7 @@ async function executeCheckPrescription(
     success: true,
     data: {
       userId: userId,
-      medicationName: medication.name,
+      medicationName: language === 0 ? medication.nameHebrew : medication.name,
       requiresPrescription: medication.requiresPrescription,
       hasValidPrescription: hasPrescription,
       canPurchase: hasPrescription,

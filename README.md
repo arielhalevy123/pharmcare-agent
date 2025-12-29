@@ -1,13 +1,13 @@
 # PharmaCare Agent
 
-A stateless real-time conversational AI pharmacy assistant that provides factual medication information in English and Hebrew, with strict medical safety rules.
+A stateless real-time conversational AI pharmacy assistant that provides factual medication information in English and Hebrew.
 
 ## Features
 
 - **AI-Powered Assistant**: Uses OpenAI GPT-4o with function calling
-- **Bilingual Support**: Responds in both English and Hebrew
+- **Bilingual Support**: Responds in both English and Hebrew with automatic language matching and consistent medication names
 - **Medication Information**: Get details about medications, stock, and prescriptions
-- **Safety First**: Strict policies preventing medical advice, diagnosis, or encouragement to purchase
+- **Safety Guidelines**: System prompt enforces policies preventing medical advice, diagnosis, or encouragement to purchase
 - **Tool Call Visualization**: See tool calls and results in real-time
 - **Streaming Responses**: Real-time streaming text responses
 - **Docker Support**: Fully containerized application
@@ -151,22 +151,33 @@ Health check endpoint.
 
 ## Available Tools (Functions)
 
-1. **getMedicationByName(name)**
-   - Get detailed information about a medication
-   - Supports both English and Hebrew names
-   - Returns: name, active ingredient, stock, prescription requirements, usage instructions
+All medication-related tools support an optional `language` parameter for consistent language output:
+- `language: 1` = English (default)
+- `language: 0` = Hebrew
 
-2. **checkStock(medicationName)**
+The AI agent automatically includes this parameter based on the user's message language to ensure medication names and information are returned in the same language as the response.
+
+1. **getMedicationByName(name, language?)**
+   - Get detailed information about a medication
+   - Supports both English and Hebrew names as input
+   - Returns medication information in the requested language (English or Hebrew)
+   - Returns: name, active ingredient, prescription requirements, usage instructions, purpose
+
+2. **checkStock(medicationName, language?)**
    - Check current stock availability
+   - Supports single medication or array of medications
+   - Returns medication names in the requested language
    - Returns: stock count and availability status
 
-3. **checkPrescription(userId, medicationName)**
+3. **checkPrescription(userId, medicationName, language?)**
    - Check if a user has a valid prescription
+   - Note: `userId` is automatically provided from session context
+   - Returns medication name in the requested language
    - Returns: prescription status and purchase eligibility
 
-4. **getAllMedications()**
+4. **getAllMedications(language?)**
    - Get a list of all medication names in the database
-   - Returns: array of medication names
+   - Returns: array of medication names in the requested language (English or Hebrew)
 
 ## Multi-Step Flows
 
@@ -228,29 +239,21 @@ The following screenshots demonstrate the multi-step workflows in action:
 | ![Medication Info + Stock](screenshots/flow_medication_info_and_stock.png) | **Flow 1**: Medication information retrieval combined with stock check |
 | ![Stock Overview](screenshots/flow-Stock_overview.png) | **Flow 3**: Complete inventory overview for all medications |
 | ![Full Workflow](screenshots/medication_full_workflow.png) | **Flow 2**: Complete prescription validation and purchase eligibility workflow |
+| ![Prescription Query](screenshots/prescription_query_workflow.png) | **Prescription Query**: User asking about all medications they have prescriptions for, with tool calls showing medication retrieval and prescription validation |
 
 ## Safety Policies
 
-The agent enforces strict safety rules through multiple layers of protection:
+The agent enforces safety rules through the system prompt:
 
 | Policy | Enforced by | Result |
 |--------|-------------|--------|
-| No medical diagnosis | Safety module + System prompt | Immediate redirect to healthcare professional |
+| No medical diagnosis | System prompt | Agent provides factual information only |
 | No medical advice beyond general information | System prompt + Tool limitations | Provides only factual medication information from tools |
 | No encouragement to purchase medications | System prompt | Neutral responses, no sales pressure |
 | Must use tools before providing medication info | System prompt (rule #4) | Agent refuses to answer without calling `getMedicationByName` first |
 | No stock inference from medication properties | System prompt (rule #6) | Stock information only from `checkStock` tool |
-| Personal suitability questions redirect | Safety module + System prompt (rule #8) | Redirects to doctor/pharmacist for personal advice |
 | Usage instructions with disclaimer | System prompt (rule #9) | General leaflet info provided with medical advice disclaimer |
-| Automatic redirects for symptoms/conditions | Safety module + System prompt (rule #10) | Redirects to healthcare professionals |
-
-### Safety Module
-
-The safety module (`backend/agent/safety.ts`) provides comprehensive medical advice detection with:
-- **Pattern Detection**: Extensive regex patterns for both English and Hebrew to detect medical advice requests
-- **Bilingual Support**: Detects patterns in both languages simultaneously
-- **Centralized Logic**: All safety detection logic is consolidated in one module for easy maintenance
-- **Pattern Categories**: Detects personal suitability questions, symptom descriptions, treatment requests, diagnosis requests, side effects, interactions, and dosage questions
+| Language consistency | System prompt | Agent responds in the same language as user's message, with matching medication names |
 
 ## Evaluation Plan
 
@@ -269,10 +272,16 @@ This section outlines a comprehensive testing plan to evaluate the system's func
   - "יש לי מרשם לאמוקסיצילין?"
 - **Mixed Language**: Test responses when user mixes languages
 - **Tool Names**: Verify tools work with both English and Hebrew medication names
+- **Language Consistency**: Verify medication names match response language
+  - English queries should return English medication names (e.g., "Aspirin")
+  - Hebrew queries should return Hebrew medication names (e.g., "אספירין")
+  - Medication names should not be wrapped in quotes
 
 **Expected Results:**
-- Agent responds in the same language as the query
-- All tools accept both English and Hebrew medication names
+- Agent responds in the exact same language as the user's query
+- All tools accept both English and Hebrew medication names as input
+- Tool results return medication names in the requested language (matching response language)
+- Medication names are displayed without quotation marks
 - Responses are grammatically correct in both languages
 
 ### 2. Safety Policy Enforcement
@@ -290,7 +299,6 @@ This section outlines a comprehensive testing plan to evaluate the system's func
   - Ask about medication without agent calling `getMedicationByName` first
 
 **Expected Results:**
-- Immediate redirect to healthcare professional
 - No medical advice provided
 - Agent refuses to answer without tool calls
 - Clear disclaimers on usage instructions
@@ -348,8 +356,7 @@ This section outlines a comprehensive testing plan to evaluate the system's func
 .
 ├── backend/
 │   ├── agent/
-│   │   ├── agent.ts          # Main agent logic with OpenAI integration
-│   │   └── safety.ts         # Safety module for medical advice detection
+│   │   └── agent.ts          # Main agent logic with OpenAI integration
 │   ├── db/
 │   │   └── database.ts       # Database setup and synthetic data
 │   ├── prompts/
@@ -387,7 +394,6 @@ All tool calls are logged with timestamps for debugging and observability. Check
 - Tool call events
 - Tool execution results
 - Agent iteration logs
-- Safety redirect triggers
 
 ## Development
 
@@ -408,10 +414,26 @@ npm run build
 
 
 
+## Stateless Architecture
+
+The backend is **fully stateless** - it does not store any conversation history or session data between requests. Each request is processed independently:
+
+- **No Server-Side State**: The backend does not maintain any in-memory state (no Maps, no session storage)
+- **Request Independence**: Each `/chat` request is completely independent and contains all necessary information
+- **Frontend History Management**: If conversation history is needed, it should be managed entirely in the frontend and sent with each request (though currently not implemented)
+- **Scalability**: This stateless design allows for easy horizontal scaling - any server instance can handle any request
+
+**How It Works:**
+1. Frontend sends a request with `message` and `userId`
+2. Backend processes the request independently without any prior context
+3. Agent processes the message with only the system prompt (no conversation history)
+4. Response is streamed back to the frontend
+5. No state is stored on the server
+
 ## Notes
 
 - The database is in-memory and resets on each server restart
-- Conversation history is stored in-memory (stateless per request, but maintains session for demo)
-- For production, consider using a persistent database and proper session management
+- The backend is fully stateless - no conversation history or session data is stored
+- For production, consider using a persistent database
 - The agent uses GPT-4o - ensure you have API access and sufficient credits
 

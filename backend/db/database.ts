@@ -39,26 +39,32 @@ class Database {
     await this.initialized;
   }
 
+  /**
+   * Helper method to promisify db.run with parameters
+   * @param sql - SQL query string
+   * @param params - Optional parameters array
+   * @returns Promise that resolves when query completes
+   */
+  private run(sql: string, params?: any[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (params) {
+        this.db.run(sql, params, (err: Error | null) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      } else {
+        this.db.run(sql, (err: Error | null) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      }
+    });
+  }
+
   private async initializeDatabase(): Promise<void> {
-    // Helper function to promisify db.run with parameters
-    const run = (sql: string, params?: any[]): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        if (params) {
-          this.db.run(sql, params, (err: Error | null) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        } else {
-          this.db.run(sql, (err: Error | null) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        }
-      });
-    };
 
     // Create tables
-    await run(`
+    await this.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -66,7 +72,7 @@ class Database {
       )
     `);
 
-    await run(`
+    await this.run(`
       CREATE TABLE IF NOT EXISTS medications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -81,14 +87,14 @@ class Database {
       )
     `);
 
-    await run(`
+    await this.run(`
       CREATE TABLE IF NOT EXISTS stock (
         name TEXT PRIMARY KEY,
         quantity INTEGER NOT NULL
       )
     `);
 
-    await run(`
+    await this.run(`
       CREATE TABLE IF NOT EXISTS prescriptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         userId INTEGER NOT NULL,
@@ -104,23 +110,6 @@ class Database {
   }
 
   private async insertSyntheticData(): Promise<void> {
-    // Helper function to promisify db.run with parameters
-    const run = (sql: string, params?: any[]): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        if (params) {
-          this.db.run(sql, params, (err: Error | null) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        } else {
-          this.db.run(sql, (err: Error | null) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        }
-      });
-    };
-
     // Insert 10 users (5 with prescription permissions)
     const users = [
       { name: 'Alice Johnson', hasPrescriptionPermission: true },
@@ -136,7 +125,7 @@ class Database {
     ];
 
     for (const user of users) {
-      await run(
+      await this.run(
         'INSERT INTO users (name, hasPrescriptionPermission) VALUES (?, ?)',
         [user.name, user.hasPrescriptionPermission ? 1 : 0]
       );
@@ -208,7 +197,7 @@ class Database {
 
     // Insert medications (without stock)
     for (const med of medications) {
-      await run(
+      await this.run(
         `INSERT INTO medications (name, nameHebrew, activeIngredient, activeIngredientHebrew, requiresPrescription, usageInstructions, usageInstructionsHebrew, purpose, purposeHebrew)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -227,7 +216,7 @@ class Database {
 
     // Insert stock data separately
     for (const med of medications) {
-      await run(
+      await this.run(
         'INSERT INTO stock (name, quantity) VALUES (?, ?)',
         [med.name, med.stock]
       );
@@ -246,13 +235,18 @@ class Database {
     ];
 
     for (const presc of prescriptions) {
-      await run(
+      await this.run(
         'INSERT INTO prescriptions (userId, medicationId, valid) VALUES (?, ?, ?)',
         [presc.userId, presc.medicationId, 1]
       );
     }
   }
 
+  /**
+   * Retrieves user information by user ID
+   * @param userId - User ID to lookup
+   * @returns User object or null if not found
+   */
   async getUser(userId: number): Promise<User | null> {
     await this.ensureInitialized();
     return new Promise((resolve, reject) => {
@@ -278,19 +272,18 @@ class Database {
     });
   }
 
+  /**
+   * Retrieves medication information by name (supports both English and Hebrew names)
+   * @param name - Medication name in English or Hebrew
+   * @returns Medication object or null if not found
+   */
   async getMedicationByName(name: string): Promise<Medication | null> {
     await this.ensureInitialized();
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'database.ts:281',message:'getMedicationByName entry',data:{inputName:name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     return new Promise((resolve, reject) => {
       this.db.get(
         'SELECT * FROM medications WHERE LOWER(name) = LOWER(?) OR LOWER(nameHebrew) = LOWER(?)',
         [name, name],
         (err, row: any) => {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'database.ts:287',message:'getMedicationByName result',data:{err:err?.message,found:!!row,englishName:row?.name,hebrewName:row?.nameHebrew},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
           if (err) {
             reject(err);
           } else {
@@ -316,6 +309,10 @@ class Database {
     });
   }
 
+  /**
+   * Retrieves all medication names from the database
+   * @returns Array of medication names (English) sorted alphabetically
+   */
   async getAllMedications(): Promise<string[]> {
     await this.ensureInitialized();
     return new Promise((resolve, reject) => {
@@ -330,18 +327,17 @@ class Database {
     });
   }
 
+  /**
+   * Checks stock quantity for a medication by name (supports both English and Hebrew names)
+   * @param medicationName - Medication name in English or Hebrew
+   * @returns Stock quantity (0 if medication not found)
+   */
   async checkStock(medicationName: string): Promise<number> {
     await this.ensureInitialized();
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'database.ts:327',message:'checkStock entry',data:{medicationName},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,B,D,E'})}).catch(()=>{});
-    // #endregion
     
     // First resolve the medication to get the canonical English name
     // This handles both English and Hebrew name inputs
     const medication = await this.getMedicationByName(medicationName);
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'database.ts:331',message:'after getMedicationByName resolution',data:{found:!!medication,englishName:medication?.name,originalInput:medicationName},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     
     if (!medication) {
       // Medication not found, return 0
@@ -350,17 +346,11 @@ class Database {
     
     // Use the canonical English name to query the stock table
     const englishName = medication.name;
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'database.ts:341',message:'before stock query with english name',data:{queryName:englishName},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,C,D,E'})}).catch(()=>{});
-    // #endregion
     return new Promise((resolve, reject) => {
       this.db.get(
         'SELECT quantity FROM stock WHERE name = ?',
         [englishName],
         (err, row: any) => {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/e41a5c1e-ac10-412b-9d3c-e7600e7576f6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'database.ts:347',message:'stock query result',data:{err:err?.message,found:!!row,quantity:row?.quantity,returnedValue:row ? row.quantity : 0},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,C,D,E'})}).catch(()=>{});
-          // #endregion
           if (err) {
             reject(err);
           } else {
@@ -371,6 +361,12 @@ class Database {
     });
   }
 
+  /**
+   * Checks if a user has a valid prescription for a medication
+   * @param userId - User ID to check
+   * @param medicationName - Medication name in English or Hebrew
+   * @returns true if medication doesn't require prescription or user has valid prescription, false otherwise
+   */
   async checkPrescription(userId: number, medicationName: string): Promise<boolean> {
     await this.ensureInitialized();
     const medication = await this.getMedicationByName(medicationName);

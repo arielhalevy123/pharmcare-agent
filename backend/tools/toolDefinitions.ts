@@ -14,6 +14,11 @@ export const toolDefinitions: ChatCompletionTool[] = [
             type: 'string',
             description: 'The name of the medication in English or Hebrew',
           },
+          language: {
+            type: 'number',
+            description: 'Language preference for medication names: 1 = English (default), 0 = Hebrew',
+            enum: [0, 1],
+          },
         },
         required: ['name'],
       },
@@ -42,6 +47,11 @@ export const toolDefinitions: ChatCompletionTool[] = [
               },
             ],
           },
+          language: {
+            type: 'number',
+            description: 'Language preference for medication names: 1 = English (default), 0 = Hebrew',
+            enum: [0, 1],
+          },
         },
         required: ['medicationName'],
       },
@@ -64,6 +74,11 @@ export const toolDefinitions: ChatCompletionTool[] = [
             type: 'string',
             description: 'The name of the medication to check prescription for',
           },
+          language: {
+            type: 'number',
+            description: 'Language preference for medication names: 1 = English (default), 0 = Hebrew',
+            enum: [0, 1],
+          },
         },
         required: ['medicationName'], // userId is optional since it's auto-injected
       },
@@ -77,7 +92,13 @@ export const toolDefinitions: ChatCompletionTool[] = [
         'Get a list of all medication names in the database. Returns an array of medication names (e.g., ["Paracetamol", "Ibuprofen", ...]).',
       parameters: {
         type: 'object',
-        properties: {},
+        properties: {
+          language: {
+            type: 'number',
+            description: 'Language preference for medication names: 1 = English (default), 0 = Hebrew',
+            enum: [0, 1],
+          },
+        },
       },
     },
   },

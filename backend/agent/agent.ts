@@ -3,15 +3,29 @@ import { toolDefinitions } from '../tools/toolDefinitions';
 import { executeTool } from '../tools/toolExecutor';
 import { logger } from '../utils/logger';
 import { SAFETY_SYSTEM_PROMPT } from '../prompts/systemPrompt';
-import { isMedicalAdvice, SAFETY_REDIRECT_REASON } from './safety';
 
+/**
+ * PharmacyAgent - Main AI agent class for processing pharmacy-related queries
+ * Handles tool calling and streaming responses
+ */
 export class PharmacyAgent {
   private openai: OpenAI;
 
+  /**
+   * Creates a new PharmacyAgent instance
+   * @param apiKey - OpenAI API key for authentication
+   */
   constructor(apiKey: string) {
     this.openai = new OpenAI({ apiKey });
   }
 
+  /**
+   * Processes a user message and returns a streaming response
+   * @param userMessage - The user's message/query
+   * @param userId - The ID of the user making the request
+   * @param conversationHistory - Optional conversation history for context
+   * @returns Async generator yielding events (text, tool_call, tool_result)
+   */
   async processMessage(
     userMessage: string,
     userId: number,
@@ -19,12 +33,6 @@ export class PharmacyAgent {
   ): Promise<AsyncGenerator<{ type: 'text' | 'tool_call' | 'tool_result'; data: any }, void, unknown>> {
     const timestamp = new Date().toISOString();
     logger.log(`[${timestamp}] Processing message from user ${userId}`, { message: userMessage });
-
-    // Check for safety violations before processing
-    if (isMedicalAdvice(userMessage)) {
-      logger.log(`[${timestamp}] Safety redirect triggered`, { reason: SAFETY_REDIRECT_REASON });
-      return this.streamRedirectMessage(SAFETY_REDIRECT_REASON);
-    }
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: SAFETY_SYSTEM_PROMPT },
@@ -35,33 +43,13 @@ export class PharmacyAgent {
     return this.streamWithFunctionCalling(messages, userId);
   }
 
-  private async *streamRedirectMessage(reason: string): AsyncGenerator<{ type: 'text' | 'tool_call' | 'tool_result'; data: any }, void, unknown> {
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      {
-        role: 'system',
-        content: SAFETY_SYSTEM_PROMPT,
-      },
-      {
-        role: 'user',
-        content: `The user asked something that requires medical advice. Please redirect them politely to a healthcare professional. Reason: ${reason}`,
-      },
-    ];
-
-    const stream = await this.openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: messages,
-      stream: true,
-      temperature: 0.7,
-    });
-
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content;
-      if (content) {
-        yield { type: 'text', data: content };
-      }
-    }
-  }
-
+  /**
+   * Streams AI responses with function calling support
+   * Handles multi-step tool execution with iteration
+   * @param messages - Array of chat messages including system prompt
+   * @param userId - User ID for context (injected into tool calls when needed)
+   * @returns Async generator yielding events (text, tool_call, tool_result)
+   */
   private async *streamWithFunctionCalling(
     messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     userId: number
